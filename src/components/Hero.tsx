@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Info, Play } from 'lucide-react';
-import type { Title } from '../lib/tmdb';
+import { getTrailer, type Title } from '../lib/tmdb';
 import { detailsOf, watchOf } from '../lib/routes';
+import { useAsync } from '../hooks/useAsync';
+import { BackdropVideo } from './BackdropVideo';
 import { ListButton } from './ListButton';
 import { TmdbScore } from './RatingBadges';
 
@@ -12,6 +14,7 @@ export function Hero({ items }: { items: Title[] }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const count = items.length;
+  const current = count ? items[index % count] : null;
 
   useEffect(() => {
     if (count < 2 || paused) return;
@@ -19,16 +22,30 @@ export function Hero({ items }: { items: Title[] }) {
     return () => window.clearTimeout(t);
   }, [index, count, paused]);
 
-  if (!count) return null;
-  const current = items[index % count];
+  // Trailer for the slide on screen, fetched once it has had time to settle.
+  const [seekTrailer, setSeekTrailer] = useState(false);
+  useEffect(() => {
+    setSeekTrailer(false);
+    const t = window.setTimeout(() => setSeekTrailer(true), 1400);
+    return () => window.clearTimeout(t);
+  }, [current?.key]);
+
+  const trailer = useAsync(
+    () => (current && seekTrailer ? getTrailer(current.type, current.id) : Promise.resolve(null)),
+    [current?.key, seekTrailer],
+  );
+  const trailerKey = trailer.data?.key;
+
+  if (!current) return null;
 
   return (
-    <section className={`hero ${paused ? "is-paused" : ""}`} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} aria-roledescription="carousel">
+    <section className={`hero ${paused ? 'is-paused' : ''}`} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} aria-roledescription="carousel">
       {items.map((t, i) => (
         <div key={t.key} className={`hero__slide ${i === index ? 'is-active' : ''}`} aria-hidden={i !== index}>
           {t.backdrop && <img src={t.backdrop} alt="" />}
         </div>
       ))}
+      {trailerKey && <BackdropVideo key={trailerKey} videoKey={trailerKey} start={8} />}
       <div className="hero__veil" />
       <div className="hero__content" key={current.key}>
         <p className="eyebrow hero__enter" style={{ '--d': '0ms' } as React.CSSProperties}>

@@ -28,7 +28,6 @@ export const paths = {
     type === 'movie' ? `/watch/movie/${id}` : `/watch/tv/${id}/${season}/${episode}`,
   library: () => '/library',
   account: () => '/account',
-  embed: () => '/embed',
 };
 
 export const detailsOf = (t: Title) => paths.details(t.type, t.id, t.title);

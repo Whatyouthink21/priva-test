@@ -288,6 +288,7 @@ interface RawVideo {
   key: string;
   site: string;
   type: string;
+  name?: string;
   official?: boolean;
 }
 
@@ -303,13 +304,19 @@ function mapPerson(c: RawCast, isCrew: boolean): Person {
   };
 }
 
-function pickTrailer(videos: RawVideo[] | undefined): string | null {
+function bestTrailer(videos: RawVideo[] | undefined): RawVideo | null {
   const yt = (videos ?? []).filter((v) => v.site === 'YouTube');
-  const best =
+  return (
     yt.find((v) => v.type === 'Trailer' && v.official) ??
     yt.find((v) => v.type === 'Trailer') ??
-    yt.find((v) => v.type === 'Teaser');
-  return best?.key ?? null;
+    yt.find((v) => v.type === 'Teaser') ??
+    yt[0] ??
+    null
+  );
+}
+
+function pickTrailer(videos: RawVideo[] | undefined): string | null {
+  return bestTrailer(videos)?.key ?? null;
 }
 
 const CREW_ORDER = ['Director', 'Screenplay', 'Writer', 'Story', 'Creator', 'Executive Producer', 'Producer', 'Director of Photography', 'Original Music Composer', 'Editor'];
@@ -363,6 +370,82 @@ export function getDetails(type: MediaType, id: number): Promise<Details> {
       countries: (r.production_countries ?? r.origin_country ?? []).map((c: any) => (typeof c === 'string' ? c : c.name)),
     } as Details;
   });
+}
+
+export interface Trailer {
+  key: string;
+  name: string;
+}
+
+/** Lightweight trailer lookup used for background playback (hero + details pages). */
+export function getTrailer(type: MediaType, id: number): Promise<Trailer | null> {
+  return request<{ results?: RawVideo[] }>(`/${type}/${id}/videos`).then((r) => {
+    const best = bestTrailer(r.results);
+    return best ? { key: best.key, name: best.name ?? 'Trailer' } : null;
+  });
+}
+
+/* ---------- watch providers (where to stream) ---------- */
+
+export interface WatchProvider {
+  id: number;
+  name: string;
+  logo: string | null;
+}
+
+export interface ProviderRegion {
+  /** JustWatch page for this title in the region. */
+  link: string;
+  flatrate: WatchProvider[];
+  free: WatchProvider[];
+  ads: WatchProvider[];
+  rent: WatchProvider[];
+  buy: WatchProvider[];
+}
+
+function providerList(raw: unknown): WatchProvider[] {
+  return ((raw as any[]) ?? []).map((p) => ({
+    id: p.provider_id,
+    name: p.provider_name ?? '',
+    logo: img(p.logo_path, 'w92'),
+  }));
+}
+
+/**
+ * Streaming availability per country, keyed by ISO-3166-1 code (US, GB, IN…).
+ * Returns an empty object when TMDB has no data for the title.
+ */
+export function getWatchProviders(type: MediaType, id: number): Promise<Record<string, ProviderRegion>> {
+  return request<{ results?: Record<string, any> }>(`/${type}/${id}/watch/providers`).then((r) => {
+    const out: Record<string, ProviderRegion> = {};
+    for (const [code, v] of Object.entries(r.results ?? {})) {
+      out[code] = {
+        link: v?.link ?? '',
+        flatrate: providerList(v?.flatrate),
+        free: providerList(v?.free),
+        ads: providerList(v?.ads),
+        rent: providerList(v?.rent),
+        buy: providerList(v?.buy),
+      };
+    }
+    return out;
+  });
+}
+
+export interface ProviderRegionOption {
+  code: string;
+  name: string;
+}
+
+/** Countries TMDB reports provider data for, alphabetical by English name. */
+export function getProviderRegions(): Promise<ProviderRegionOption[]> {
+  return request<{ results?: { iso_3166_1: string; english_name: string; native_name: string }[] }>(
+    '/watch/providers/regions',
+  ).then((r) =>
+    (r.results ?? [])
+      .map((x) => ({ code: x.iso_3166_1, name: x.english_name || x.native_name || x.iso_3166_1 }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  );
 }
 
 export function getSeason(tvId: number, season: number): Promise<Episode[]> {

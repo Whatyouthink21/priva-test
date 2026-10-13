@@ -10,7 +10,6 @@ import { PersonPage } from './pages/PersonPage';
 import { WatchPage } from './pages/WatchPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { AccountPage } from './pages/AccountPage';
-import { EmbedPage } from './pages/EmbedPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 /** Old genre URLs redirect to the catalogue with the genre filter applied. */
@@ -38,7 +37,6 @@ export function App() {
               <Route path="person/:id" element={<PersonPage />} />
               <Route path="library" element={<LibraryPage />} />
               <Route path="account" element={<AccountPage />} />
-              <Route path="embed" element={<EmbedPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route path="watch/movie/:id" element={<WatchPage type="movie" />} />
