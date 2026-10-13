@@ -23,7 +23,6 @@ export function Footer() {
           <ul>
             <li><Link to="/library">My List</Link></li>
             <li><Link to="/account">Sign in</Link></li>
-            <li><Link to="/embed">Embed the player</Link></li>
           </ul>
         </div>
         <div className="footer__credit">

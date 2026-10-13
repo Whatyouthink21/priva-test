@@ -9,7 +9,6 @@ const LINKS = [
   { to: '/', label: 'Home', end: true },
   { to: '/movies', label: 'Movies' },
   { to: '/tv', label: 'TV Shows' },
-  { to: '/embed', label: 'Embed' },
 ];
 
 export function Navbar() {

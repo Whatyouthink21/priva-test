@@ -33,8 +33,27 @@ Without Firebase keys the app still works: My List and history are stored in the
 
 - **PRIVA Stream** (primary): `https://tgvid.lovable.app/embed/...` with `color`, `back=false`, `episodeSelector=false`, `autoplayNextEp=true`.
 - **Cinema Server**: same player with `server=cinemaos`.
-- **Second source**: VidSrc (`vidsrc.mov`). Edit `src/lib/players.ts` if your second source uses a different URL.
+- **VidStuck**: `https://vidstuck.xyz/embed/movie/{tmdbId}` and `/embed/tv/{tmdbId}/{season}/{episode}` with `color`, `branding=PRIVA`, `overlay=true` (TV adds `nextEpisode`, `autoplayNextEpisode` and `episodeSelector`). It posts playback progress back to the page, which the watch page records as history.
 
-Routes use hash URLs (`#/movie/603-title`, `#/tv/94605`, `#/person/…`, `#/watch/tv/94605/1/1?server=cinemaos`, `#/search?q=…`, `#/genre/movie/28`, `#/embed`).
+All player URLs are built in `src/lib/players.ts`; the old `server=second`/`vidsrc` links still resolve to VidStuck.
+
+## Downloads
+
+`src/lib/downloads.ts` builds a per-title page on each download source. Both take TMDB ids:
+
+- **VidSrc Downloads** — `https://dl.vidsrc.party/movie/{tmdbId}`, `/tv/{tmdbId}/{season}/{episode}`
+- **VidVault** — `https://vidvault.to/movie/{tmdbId}`, `/tv/{tmdbId}/{season}/{episode}`
+
+Links appear in a *Save a copy* section on film and series pages and next to the player on the watch page. Nothing is proxied or hosted by PRIVA.
+
+## Where to watch
+
+Film and series pages list the streaming providers that carry the title (Netflix, Prime Video, Disney+ and so on) using the TMDB watch-provider API, grouped into subscription, free, rent and buy, with a country picker. Provider availability is JustWatch data, surfaced through TMDB.
+
+## Trailers
+
+The hero carousel and the film/series pages play the title's trailer muted and looping behind the artwork (`BackdropVideo`). Trailers are skipped when the visitor prefers reduced motion, and the still image stays in place as a fallback.
+
+Routes use hash URLs (`#/movie/603-title`, `#/tv/94605`, `#/person/…`, `#/watch/tv/94605/1/1?server=cinemaos`, `#/search?q=…`, `#/genre/movie/28`).
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.

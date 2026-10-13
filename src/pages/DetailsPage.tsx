@@ -1,7 +1,17 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronRight, Clapperboard, Play, Tv, Users } from 'lucide-react';
-import { getDetails, getSeason, type Details, type Episode, type MediaType, type Title } from '../lib/tmdb';
+import { ChevronRight, Clapperboard, Download, Play, Tv, Users } from 'lucide-react';
+import {
+  getDetails,
+  getProviderRegions,
+  getSeason,
+  getWatchProviders,
+  type Details,
+  type Episode,
+  type MediaType,
+  type Title,
+  type WatchProvider,
+} from '../lib/tmdb';
 import { useAsync } from '../hooks/useAsync';
 import { useTitle } from '../hooks/useTitle';
 import { parseId, longDate, money, runtime, year } from '../lib/format';
@@ -9,12 +19,14 @@ import { paths, watchOf } from '../lib/routes';
 import { ListButton } from '../components/ListButton';
 import { ImdbScore, TmdbScore } from '../components/RatingBadges';
 import { TrailerModal } from '../components/TrailerModal';
+import { BackdropVideo } from '../components/BackdropVideo';
 import { PersonCard } from '../components/PersonCard';
 import { Rail } from '../components/Rail';
 import { PosterCard } from '../components/PosterCard';
 import { ErrorState, Loading, SetupNotice } from '../components/States';
 import { Reveal } from '../components/Reveal';
 import { SOURCES } from '../lib/players';
+import { DOWNLOAD_SOURCES } from '../lib/downloads';
 import { TMDB_KEY } from '../config';
 
 export function DetailsPage({ type }: { type: MediaType }) {
@@ -37,6 +49,7 @@ export function DetailsPage({ type }: { type: MediaType }) {
     <article className="details">
       <header className="details__hero">
         {d.backdrop && <img className="details__backdrop" src={d.backdrop} alt="" />}
+        {d.trailer && <BackdropVideo videoKey={d.trailer} delay={1500} start={8} className="details__video" />}
         <div className="details__veil" />
         <div className="container details__grid">
           <div className="details__poster">
@@ -99,6 +112,10 @@ export function DetailsPage({ type }: { type: MediaType }) {
       <div className="container details__body">
         <StreamsPanel d={d} />
 
+        <ProvidersPanel d={d} />
+
+        <DownloadsPanel d={d} />
+
         {isTv && <SeasonsPanel d={d} />}
 
         <section className="section">
@@ -153,7 +170,7 @@ function StreamsPanel({ d }: { d: Details }) {
       </Reveal>
       <div className="streams__grid">
         {SOURCES.map((s, i) => (
-          <Link key={s.id} to={`${base}?server=${s.server ?? (s.id === 'second' ? 'second' : 'first')}`} className="stream" style={{ '--i': i } as React.CSSProperties}>
+          <Link key={s.id} to={`${base}?server=${s.param}`} className="stream" style={{ '--i': i } as React.CSSProperties}>
             <span className="stream__num">0{i + 1}</span>
             <span className="stream__body">
               <b>{s.label}</b>
@@ -161,6 +178,161 @@ function StreamsPanel({ d }: { d: Details }) {
             </span>
             <Play size={16} fill="currentColor" className="stream__play" />
           </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ---------- where to watch ---------- */
+
+const REGION_KEY = 'priva:region';
+const FALLBACK_LINK = (type: MediaType, id: number, region: string) =>
+  `https://www.themoviedb.org/${type}/${id}/watch?locale=${region}`;
+
+function storedRegion(): string {
+  try {
+    const saved = localStorage.getItem(REGION_KEY);
+    if (saved) return saved;
+  } catch {
+    /* storage unavailable */
+  }
+  const parts = (typeof navigator !== 'undefined' ? navigator.language : '').split('-');
+  const code = parts[1]?.toUpperCase();
+  return code && code.length === 2 ? code : 'US';
+}
+
+function regionLabel(code: string): string {
+  try {
+    return new Intl.DisplayNames([typeof navigator !== 'undefined' ? navigator.language : 'en'], { type: 'region' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+function ProvidersPanel({ d }: { d: Details }) {
+  const [region, setRegion] = useState(storedRegion);
+  const regions = useAsync(() => getProviderRegions(), []);
+  const state = useAsync(() => getWatchProviders(d.type, d.id), [d.type, d.id]);
+  const current = state.data?.[region] ?? null;
+  const link = current?.link || FALLBACK_LINK(d.type, d.id, region);
+
+  const groups = useMemo(() => {
+    if (!current) return [];
+    return [
+      { id: 'stream', label: 'Included with a subscription', items: current.flatrate },
+      { id: 'free', label: 'Free with ads', items: [...current.free, ...current.ads] },
+      { id: 'rent', label: 'Rent', items: current.rent },
+      { id: 'buy', label: 'Buy', items: current.buy },
+    ].filter((g) => g.items.length > 0);
+  }, [current]);
+
+  const options = useMemo(() => {
+    const list = regions.data ?? [];
+    if (region && !list.some((r) => r.code === region)) return [{ code: region, name: regionLabel(region) }, ...list];
+    return list;
+  }, [regions.data, region]);
+
+  const choose = (code: string) => {
+    setRegion(code);
+    try {
+      localStorage.setItem(REGION_KEY, code);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <section className="section providers" id="providers">
+      <Reveal>
+        <header className="section-head">
+          <div>
+            <p className="eyebrow">Where to watch</p>
+            <h2>Streaming providers</h2>
+          </div>
+          <label className="select select--region">
+            <span className="sr">Country</span>
+            <select value={region} onChange={(e) => choose(e.target.value)} aria-label="Country for provider availability">
+              {options.map((r) => (
+                <option key={r.code} value={r.code}>{r.name}</option>
+              ))}
+            </select>
+          </label>
+        </header>
+      </Reveal>
+
+      {state.error ? (
+        <p className="muted small">Provider data is unavailable right now.</p>
+      ) : state.loading && !state.data ? (
+        <div className="providers__row">
+          {Array.from({ length: 5 }, (_, i) => <div key={i} className="provider provider--skeleton skeleton" />)}
+        </div>
+      ) : groups.length === 0 ? (
+        <p className="muted">
+          No subscription, rental or purchase option listed for {regionLabel(region)}.{' '}
+          <a className="link-arrow" href={link} target="_blank" rel="noopener noreferrer">
+            Check availability <ChevronRight size={14} />
+          </a>
+        </p>
+      ) : (
+        <>
+          {groups.map((g) => (
+            <div key={g.id} className="providers__group">
+              <p className="providers__label">{g.label}</p>
+              <div className="providers__row">
+                {g.items.map((p: WatchProvider) => (
+                  <a key={`${g.id}-${p.id}`} className="provider" href={link} target="_blank" rel="noopener noreferrer" title={`${p.name} — ${g.label.toLowerCase()}`}>
+                    {p.logo ? <img src={p.logo} alt="" loading="lazy" /> : <span className="provider__mono">{p.name.slice(0, 2)}</span>}
+                    <b>{p.name}</b>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
+          <p className="providers__credit">
+            Availability data from JustWatch, via TMDB · {regionLabel(region)}
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+/* ---------- download ---------- */
+
+function DownloadsPanel({ d }: { d: Details }) {
+  const isTv = d.type === 'tv';
+  const target = isTv ? { type: d.type, id: d.id, season: 1, episode: 1 } : { type: d.type, id: d.id };
+  return (
+    <section className="section downloads" id="downloads">
+      <Reveal>
+        <header className="section-head">
+          <div>
+            <p className="eyebrow">Downloads</p>
+            <h2>Save a copy</h2>
+          </div>
+          <p className="muted small">
+            Opens a third-party download page in a new tab{isTv ? ' — pick the season and episode there' : ''}.
+          </p>
+        </header>
+      </Reveal>
+      <div className="streams__grid">
+        {DOWNLOAD_SOURCES.map((s, i) => (
+          <a
+            key={s.id}
+            className="stream download"
+            style={{ '--i': i } as React.CSSProperties}
+            href={s.build(target)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span className="stream__num">0{i + 1}</span>
+            <span className="stream__body">
+              <b>{s.label}</b>
+              <small>{s.note}</small>
+            </span>
+            <Download size={16} className="stream__play" />
+          </a>
         ))}
       </div>
     </section>

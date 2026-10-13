@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ChevronLeft, ChevronRight, Play, Share2, Check } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, Play, Share2, Check } from 'lucide-react';
 import { getDetails, getSeason, type Episode, type MediaType } from '../lib/tmdb';
 import { useAsync } from '../hooks/useAsync';
 import { useTitle } from '../hooks/useTitle';
@@ -8,12 +8,13 @@ import { useLibrary } from '../context/LibraryContext';
 import { parseId, runtime, year } from '../lib/format';
 import { paths } from '../lib/routes';
 import { SOURCES, sourceById } from '../lib/players';
+import { DOWNLOAD_SOURCES } from '../lib/downloads';
 import { Loading, ErrorState, SetupNotice } from '../components/States';
 import { Logo } from '../components/Logo';
 import { TMDB_KEY } from '../config';
 
 // Origins whose messages we trust for playback progress.
-const PLAYER_ORIGINS = ['https://tgvid.lovable.app', 'https://vidsrc.mov'];
+const PLAYER_ORIGINS = ['https://tgvid.lovable.app', 'https://vidstuck.xyz'];
 const SAVE_EVERY_MS = 15000;
 
 function readNumber(obj: Record<string, unknown>, keys: string[]): number | undefined {
@@ -49,11 +50,12 @@ export function WatchPage({ type }: { type: MediaType }) {
   }, [search]);
   const source = sourceById(sourceId);
   const chooseSource = (sid: string) => {
-    setSourceId(sid);
-    localStorage.setItem('priva:source', sid);
+    const picked = sourceById(sid);
+    setSourceId(picked.id);
+    localStorage.setItem('priva:source', picked.id);
     setSearch((prev) => {
       const next = new URLSearchParams(prev);
-      next.set('server', sid === 'priva' ? 'first' : sid);
+      next.set('server', picked.param);
       return next;
     }, { replace: true });
   };
@@ -101,7 +103,8 @@ export function WatchPage({ type }: { type: MediaType }) {
       const ep = readNumber(payload, ['episode']);
       if (s && ep) setLive((cur) => (cur.season === s && cur.episode === ep ? cur : { season: s, episode: ep }));
 
-      const current = readNumber(payload, ['currentTime', 'time', 'position']);
+      // `timestamp` is what VidStuck sends; the others cover the PRIVA player.
+      const current = readNumber(payload, ['currentTime', 'time', 'position', 'timestamp', 'watched']);
       const duration = readNumber(payload, ['duration']);
       if (current === undefined || !duration) return;
       const now = Date.now();
@@ -225,6 +228,23 @@ export function WatchPage({ type }: { type: MediaType }) {
                   </button>
                 </div>
               )}
+              <div className="watch__downloads">
+                <span className="eyebrow">Download</span>
+                <div className="watch__downloads-row">
+                  {DOWNLOAD_SOURCES.map((s) => (
+                    <a
+                      key={s.id}
+                      className="btn btn--ghost"
+                      href={s.build({ type, id, season, episode })}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={s.note}
+                    >
+                      <Download size={16} /> {s.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
               <p className="watch__note">Not loading? Switch to another source above. Playback is served by the selected third-party player.</p>
             </>
           )}
